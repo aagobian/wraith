@@ -1,0 +1,12 @@
+[package]
+name = "terminal"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ratatui.workspace = true
+crossterm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+clap.workspace = true
