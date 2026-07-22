@@ -5,9 +5,10 @@
 
 use std::collections::HashMap;
 use crate::types::{NodeRole, LogEntry};
+use crate::rpc::{AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse};
 
 /// Represent's a server's state.
-pub struct RaftState {    
+pub struct RaftState<T> {    
     /// The latest term that the server has seen.
     current_term: u64,
 
@@ -15,7 +16,7 @@ pub struct RaftState {
     voted_for: Option<u64>,
 
     /// A list of log entries.
-    log: Vec<LogEntry>,
+    log: Vec<LogEntry<T>>,
 
 
     /// The index of the highest entry committed.
@@ -47,7 +48,7 @@ pub struct RaftState {
     heartbeat: u64,
 }
 
-impl RaftState {
+impl <T: Default> RaftState<T> {
     /// Creates and returns a new RaftState struct.
     pub fn new(node_id: u64) -> Self {
         RaftState {
@@ -59,7 +60,7 @@ impl RaftState {
             id: node_id,
             current_term: 1,
             voted_for: None,
-            log: Vec::new(),
+            log: vec![ LogEntry { term: 0, payload: T::default() } ],
             commit_index: 0,
             last_applied: 0,
 
@@ -95,17 +96,64 @@ impl RaftState {
     pub fn become_candidate(&mut self) {
         self.role = NodeRole::Candidate;
         self.voted_for = Some(self.id);
-
+    
+        self.current_term += 1;
+        todo!("Check if self.current_term += 1 above is expected behavior");
         todo!("Invoke RequestVote RPCs here");
+    }
+
+    /// Unpacks a given payload Option<T>, then creates and returns an AppendEntries RPC Request.
+    pub fn create_append_entries(&self, payload: Option<T>) -> AppendEntriesRequest<T> {
+        let entry = payload.map(|p| LogEntry {
+            term: self.current_term, 
+            payload: p
+        });
+
+        AppendEntriesRequest {
+            term: self.current_term,
+            leader_id: self.id,
+            prev_log_index: (self.log.len() as u64).saturating_sub(1),
+            prev_log_term: self.log.last().map_or(0, |e| e.term),
+            entry: entry,
+            leader_commit: self.commit_index
+        }
+    }
+
+    pub fn handle_append_entries(&mut self) {
+
+    }
+
+    /// Creates and returns a RequestVote RPC request.
+    pub fn create_request_vote(&self) -> RequestVoteRequest {
+        RequestVoteRequest {
+            term: self.current_term,
+            candidate_id: self.id,
+            last_log_index: self.log.len() as u64,
+            last_log_term: self.log.last().map_or(0, |e| e.term)
+        }
+    }
+
+    pub fn handle_request_vote(&mut self) {
+
     }
 
     /// Progresses time by 1 tick. 
     /// Triggers an election timeout if the time elapsed exceeds the election timeout limit.
     pub fn tick(&mut self) {
         self.time_elapsed += 1;
-
-        if self.time_elapsed >= self.election_timeout {
-            self.become_candidate();
-        }  
+        
+        match self.role {
+            NodeRole::Candidate | NodeRole::Follower => {
+                if self.time_elapsed >= self.election_timeout {
+                    self.become_candidate();
+                }  
+            }
+            NodeRole::Leader => {
+                if self.time_elapsed >= self.heartbeat {
+                    // self.broadcast_heartbeats(); TODO: Implement this somewhere
+                    self.time_elapsed = 0;
+                }
+            }
+        }
     }
 }

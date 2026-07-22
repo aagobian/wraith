@@ -14,8 +14,11 @@ pub enum NodeRole {
 /// 
 /// Contains the term the entry was logged in and an opaque pointer to its payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogEntry {
-    term: u64,
-    payload: Vec<u8>
+pub struct LogEntry<T> {
+    /// The term this entry exists in.
+    pub term: u64,
+
+    /// The content of the log.
+    pub payload: T
 }
 
