@@ -4,6 +4,7 @@
 //! necessary for the Raft consensus algorithm.
 
 use std::collections::HashMap;
+use std::todo;
 use crate::types::{NodeRole, LogEntry};
 use crate::rpc::{AppendEntriesRequest, AppendEntriesResponse, RequestVoteRequest, RequestVoteResponse};
 
@@ -60,7 +61,7 @@ impl <T: Default> RaftState<T> {
             id: node_id,
             current_term: 1,
             voted_for: None,
-            log: vec![ LogEntry { term: 0, payload: T::default() } ],
+            log: vec![ LogEntry { index: 0, term: 0, payload: T::default().into() } ],
             commit_index: 0,
             last_applied: 0,
 
@@ -82,7 +83,7 @@ impl <T: Default> RaftState<T> {
                 continue;
             }
 
-            self.next_index.insert(i, self.commit_index + 1);
+            self.next_index.insert(i, self.log.len() as u64);
             self.match_index.insert(i, 0);
         }
     }
@@ -103,24 +104,46 @@ impl <T: Default> RaftState<T> {
     }
 
     /// Unpacks a given payload Option<T>, then creates and returns an AppendEntries RPC Request.
-    pub fn create_append_entries(&self, payload: Option<T>) -> AppendEntriesRequest<T> {
-        let entry = payload.map(|p| LogEntry {
-            term: self.current_term, 
-            payload: p
-        });
+    pub fn create_append_entries(&self, recipient_id: u64) -> Result<AppendEntriesRequest<T>, &str> {
+        let index = match self.next_index.get(&recipient_id) {
+            Some(i) => *i as usize,
+            None => { return Err("Uninitialized next_index for {recipient_id}") }
+        };
 
-        AppendEntriesRequest {
-            term: self.current_term,
+        let entries = self.log.get(index..)
+            .map(|slice| slice.to_vec())
+            .unwrap_or_default();
+
+    
+
+        Ok(AppendEntriesRequest {
+            term: self.current_term,    
             leader_id: self.id,
             prev_log_index: (self.log.len() as u64).saturating_sub(1),
             prev_log_term: self.log.last().map_or(0, |e| e.term),
-            entry: entry,
+            entries: entries,
             leader_commit: self.commit_index
-        }
+        })
     }
 
-    pub fn handle_append_entries(&mut self) {
+    pub fn handle_append_entries(&mut self, req: AppendEntriesRequest<T>) -> AppendEntriesResponse {
+        let mut success = true;
+        
+        if req.term < self.current_term {
+            success = false;
+        }
 
+        todo!("Finish this");
+        // let entry = match req.entries {
+        //     Some(e) => e,
+        //     None => None
+        // };
+        
+
+        AppendEntriesResponse { 
+            term: self.current_term, 
+            success: success
+        }
     }
 
     /// Creates and returns a RequestVote RPC request.

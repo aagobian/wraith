@@ -4,7 +4,7 @@ use serde::{Serialize, Deserialize};
 use crate::types::LogEntry;
 
 /// Represents an AppendEntries RPC request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AppendEntriesRequest<T> {
     /// The leader's term.
     pub term: u64,
@@ -18,8 +18,8 @@ pub struct AppendEntriesRequest<T> {
     /// Term of the prev_log_index entry.
     pub prev_log_term: u64,
 
-    /// The entry to store. This is empty if the RPC is a heartbeat.
-    pub entry: Option<LogEntry<T>>,
+    /// The entries to store. This is empty if the RPC is a heartbeat.
+    pub entries: Vec<LogEntry<T>>,
 
     /// The leader's commit_index.
     pub leader_commit: u64
