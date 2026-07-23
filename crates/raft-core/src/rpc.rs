@@ -13,7 +13,7 @@ pub struct AppendEntriesRequest<T> {
     pub leader_id: u64,
 
     /// Index of the log entry immediately preceding new ones.
-    pub prev_log_index: u64,
+    pub prev_log_index: usize,
 
     /// Term of the prev_log_index entry.
     pub prev_log_term: u64,
@@ -22,7 +22,7 @@ pub struct AppendEntriesRequest<T> {
     pub entries: Vec<LogEntry<T>>,
 
     /// The leader's commit_index.
-    pub leader_commit: u64
+    pub leader_commit: usize
 }
 
 /// Represents an AppendEntries RPC response.

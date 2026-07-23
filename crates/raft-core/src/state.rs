@@ -21,10 +21,10 @@ pub struct RaftState<T> {
 
 
     /// The index of the highest entry committed.
-    commit_index: u64,
+    commit_index: usize,
 
     /// The index of the highest entry actually applied to state.
-    last_applied: u64,
+    last_applied: usize,
 
 
     /// Leader: A HashMap containing the index of the next log entry to send to a given server.
@@ -95,12 +95,11 @@ impl <T: Default> RaftState<T> {
 
     /// Transitions a node to a candidate. Sends RequestVote RPCs to all other nodes.
     pub fn become_candidate(&mut self) {
+        self.current_term += 1;
         self.role = NodeRole::Candidate;
         self.voted_for = Some(self.id);
-    
-        self.current_term += 1;
-        todo!("Check if self.current_term += 1 above is expected behavior");
-        todo!("Invoke RequestVote RPCs here");
+
+        todo!("Issue RequestVote RPCs here?")
     }
 
     /// Unpacks a given payload Option<T>, then creates and returns an AppendEntries RPC Request.
@@ -110,39 +109,76 @@ impl <T: Default> RaftState<T> {
             None => { return Err("Uninitialized next_index for {recipient_id}") }
         };
 
+        // Returns empty vec if index out of bounds (for heartbeat)
         let entries = self.log.get(index..)
             .map(|slice| slice.to_vec())
             .unwrap_or_default();
 
-    
-
         Ok(AppendEntriesRequest {
             term: self.current_term,    
             leader_id: self.id,
-            prev_log_index: (self.log.len() as u64).saturating_sub(1),
+            prev_log_index: (self.log.len()).saturating_sub(1),
             prev_log_term: self.log.last().map_or(0, |e| e.term),
             entries: entries,
             leader_commit: self.commit_index
         })
     }
 
-    pub fn handle_append_entries(&mut self, req: AppendEntriesRequest<T>) -> AppendEntriesResponse {
-        let mut success = true;
-        
+    /// Handles an incoming AppendEntries request. 
+    /// 
+    /// It does this by:
+    ///     - Validating the request's term is not higher than the follower term.
+    ///     - Setting follower state (heartbeat timer, term, role)
+    ///     - Validating prev_log_index is in bounds and the entry there matches prev_log_term.
+    ///     - Finding a potential point of conflict and truncating it.
+    ///     - Appending the entries to the log. 
+    ///     - Updating commit_index if less than the leader's commit_index.
+    pub fn handle_append_entries(&mut self, req: AppendEntriesRequest<T>) -> AppendEntriesResponse {        
         if req.term < self.current_term {
-            success = false;
+            return AppendEntriesResponse { 
+                term: self.current_term, 
+                success: false
+            }
         }
 
-        todo!("Finish this");
-        // let entry = match req.entries {
-        //     Some(e) => e,
-        //     None => None
-        // };
+        self.current_term = req.term;
+        self.role = NodeRole::Follower;
+        self.voted_for = None;
+        self.time_elapsed = 0;
+
+        match self.log.get(req.prev_log_index) {
+            Some(entry) if entry.term == req.prev_log_term => {},
+            _ => { 
+                return AppendEntriesResponse { 
+                    term: self.current_term, 
+                    success: false
+                }
+            }
+        }
+
+        let mut log_index = req.prev_log_index + 1;
+        let mut entry_index = 0;
+
+        while log_index < self.log.len() && entry_index < req.entries.len() {
+            if self.log[log_index].term != req.entries[entry_index].term {
+                self.log.truncate(log_index);
+                break;
+            }
+            log_index += 1;
+            entry_index += 1;
+        }
+
+        self.log.extend_from_slice(&req.entries[entry_index..]);
         
+        if self.commit_index < req.leader_commit {
+            self.commit_index = std::cmp::min(req.leader_commit, self.log.len() - 1);
+        }
+
+        // TODO: Evaluate whether persistence is needed/should be here.
 
         AppendEntriesResponse { 
             term: self.current_term, 
-            success: success
+            success: true
         }
     }
 
